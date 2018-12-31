@@ -7,6 +7,8 @@ from rest_framework import viewsets
 from rest_framework.decorators import api_view
 from rest_framework.settings import api_settings
 
+from django.db.models import Max, Q
+
 from search.models import CollegeResult
 from search.permissions import ReadOnly
 from search.serializers import CollegeResultSerializer
@@ -128,7 +130,8 @@ def advance_search(request):
 
         # Query DB
         # queryset = CollegeResult.objects.all()
-
+        eligible_quotas = tuple(['AI'])  # TODO Fix This
+        eligible_quotas_str = str(','.join(["%s"] * len(eligible_quotas)))
         query = 'SELECT a.college_code college_code, ' + \
                 'a.branch_name branch_name, ' + \
                 'a.college_name college_name, ' + \
@@ -145,19 +148,41 @@ def advance_search(request):
                 '                   branch_name, ' + \
                 '                   stage_rank ' + \
                 '			    FROM   vw_college_result ' + \
-                '			    WHERE  cutoff_type IN( "AI" ) ' + \
+                '			    WHERE  cutoff_type IN (%s) ' + \
                 '		    ) ' + \
                 '        GROUP BY college_code, branch_name' \
                 '       ) b ' + \
                 'WHERE  a.college_code = b.college_code ' + \
                 '   AND a.branch_name = b.branch_name ' + \
                 '   AND a.stage_rank = max_cutoff_rank ' + \
-                '   AND cutoff_type IN( "AI" ) ' + \
-                'ORDER  BY a.college_code, ' + \
-                '           a.branch_name '
-    print(query)
+                '   AND cutoff_type IN (%s) ' + \
+                'ORDER  BY a.stage_mark DESC '
+        query = query % (eligible_quotas_str, eligible_quotas_str)
+    # print(query)
 
-    queryset = CollegeResult.objects.raw(query)
+    # query = "SELECT * from vw_college_result where cutoff_type IN (%s) " % eligible_quotas_str
+    # queryset = CollegeResult.objects.raw(query, params=eligible_quotas)
+    eligible_quotas = eligible_quotas + eligible_quotas
+
+    queryset = CollegeResult.objects.raw(query, params=eligible_quotas)
+
+
+    '''
+    quota =
+    query1 = CollegeResult.objects.filter(cutoff_type__in=quota)
+    query2 = query1.values('college_code', 'branch_name').annotate(stage_mark=Max('stage_mark'))
+    
+    query3 = query1.filter()
+    q_statement = Q()
+    for college in query2:
+        q_statement |= (Q(college_code=college['college_code']) & Q(branch_name=college['branch_name']) & Q(
+            stage_mark=college['stage_mark']))
+
+    query3 = query1.filter(q_statement)
+
+    query3.filter()
+    print("SGR", query3)
+    '''
 
     # queryset = CollegeResult.objects.raw(' SELECT * from vw_college_result')
 
